@@ -9,6 +9,7 @@ app = FastAPI(title="NQ 5m Data + AMD Detector (demo)")
 
 SYMBOL = "NQ=F"  # Yahoo symbol for E-mini Nasdaq continuous future
 
+
 # ---------- Utilities ----------
 def fetch_5m(symbol: str = SYMBOL, period: str = "7d", interval: str = "5m") -> pd.DataFrame:
     """
@@ -21,6 +22,7 @@ def fetch_5m(symbol: str = SYMBOL, period: str = "7d", interval: str = "5m") -> 
     df.index = pd.to_datetime(df.index)
     df = df[["open", "high", "low", "close", "volume"]]
     return df
+
 
 def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -47,6 +49,7 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df.drop(columns=["date"], inplace=True)
     return df
 
+
 # ---------- AMD Detector ----------
 def detect_amd(df: pd.DataFrame,
                vol_spike_mult: float = 3.0,
@@ -69,7 +72,7 @@ def detect_amd(df: pd.DataFrame,
     low_range = df["range"] < (df["range_med_rolling"] * low_range_mult)
     low_range_roll_frac = low_range.rolling(window=accumulation_window_bars, min_periods=1).mean()
     is_accum_region = low_range_roll_frac > 0.75
-    df["label"] = None
+    df["label"] = np.nan
     df.loc[is_accum_region, "label"] = "accumulation"
 
     # distribution
@@ -80,7 +83,7 @@ def detect_amd(df: pd.DataFrame,
     # manipulation
     manip_periods = []
     for ts in df[is_spike].index:
-        i = df.index.get_loc(ts)
+        i = df.index.get_indexer([ts])[0]  # safer for duplicate indexes
         end_i = min(len(df) - 1, i + reversal_window_bars)
         spike_bar = df.iloc[i]
         spike_dir = np.sign(spike_bar["close"] - spike_bar["open"])
@@ -98,8 +101,9 @@ def detect_amd(df: pd.DataFrame,
             manip_periods.append((ts, rev_idx))
 
     # fill gaps
-    df["label"] = df["label"].fillna(method="ffill", limit=2).fillna(method="bfill", limit=2)
+    df["label"] = df["label"].ffill(limit=2).bfill(limit=2)
     return df, manip_periods
+
 
 # ---------- Summarize Cycles ----------
 def summarize_cycles(df):
@@ -133,15 +137,18 @@ def summarize_cycles(df):
         })
     return cycles
 
+
 # ---------- API Endpoints ----------
 @app.get("/")
 def read_root():
     return {"msg": "hello from Railway 👋"}
 
+
 @app.get("/raw")
 def api_raw(period: str = Query("7d")):
     df = fetch_5m(period=period)
-    return df.reset_index().to_dict(orient="records")
+    return df.tail(1000).reset_index().to_dict(orient="records")  # limit for performance
+
 
 @app.get("/indicators")
 def api_indicators(period: str = Query("7d")):
@@ -149,13 +156,18 @@ def api_indicators(period: str = Query("7d")):
     df = compute_indicators(df)
     return df.reset_index().tail(1000).to_dict(orient="records")
 
+
 @app.get("/cycles")
 def api_cycles(period: str = Query("7d")):
     df = fetch_5m(period=period)
     df = compute_indicators(df)
     df_labeled, manip_windows = detect_amd(df)
     cycles = summarize_cycles(df_labeled)
-    return {"cycles": cycles, "manip_windows": [(str(a), str(b)) for a, b in manip_windows]}
+    return {
+        "cycles": cycles,
+        "manip_windows": [(str(a), str(b)) for a, b in manip_windows]
+    }
+
 
 @app.get("/summary")
 def api_summary(period: str = Query("7d")):
