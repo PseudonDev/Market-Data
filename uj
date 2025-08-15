@@ -1,11 +1,8 @@
 # main.py
-pip install pandasfrom fastapi import FastAPI, Query
-from pydantic import BaseModel
+from fastapi import FastAPI, Query
 import pandas as pd
 import numpy as np
 import yfinance as yf
-from datetime import datetime, timedelta
-import uvicorn
 
 app = FastAPI(title="NQ 5m Data + AMD Detector (demo)")
 
