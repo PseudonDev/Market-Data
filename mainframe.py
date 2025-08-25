@@ -1,5 +1,5 @@
 # main.py
-pip install pandasfrom fastapi import FastAPI, Query
+from fastapi import FastAPI, Query
 from pydantic import BaseModel
 import pandas as pd
 import numpy as np
