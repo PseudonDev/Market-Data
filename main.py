@@ -37,6 +37,67 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["range"] = df["high"] - df["low"]
     df.drop(columns=["date"], inplace=True)
     return df
+    import os  # <-- Add this import
+import uvicorn # <-- Add this import
+from fastapi import FastAPI, Query
+from pydantic import BaseModel
+import pandas as pd
+import numpy as np
+import yfinance as yf
+from datetime import datetime, timedelta
+
+app = FastAPI(title="NQ 5m Data + AMD Detector (demo)")
+
+# ... (rest of your functions: fetch_5m, compute_indicators, detect_amd, summarize_cycles) ...
+# I am omitting the functions here for brevity, paste them exactly as they were above.
+
+@app.get("/")
+def read_root():
+    # It seems you were testing Railway before, change this for Google Cloud Run
+    return {"msg": "hello from Google Cloud Run 👋"}
+
+@app.get("/raw")
+def api_raw(period: str = Query("7d")):
+    df = fetch_5m(period=period)
+    return df.tail(1000).reset_index().to_dict(orient="records")
+
+@app.get("/indicators")
+def api_indicators(period: str = Query("7d")):
+    df = fetch_5m(period=period)
+    df = compute_indicators(df)
+    return df.reset_index().tail(1000).to_dict(orient="records")
+
+@app.get("/cycles")
+def api_cycles(period: str = Query("7d")):
+    df = fetch_5m(period=period)
+    df = compute_indicators(df)
+    df_labeled, manip_windows = detect_amd(df)
+    cycles = summarize_cycles(df_labeled)
+    return {
+        "cycles": cycles,
+        "manip_windows": [(str(a), str(b)) for a, b in manip_windows]
+    }
+
+@app.get("/summary")
+def api_summary(period: str = Query("7d")):
+    df = fetch_5m(period=period)
+    df = compute_indicators(df)
+    df_labeled, _ = detect_amd(df)
+    cycles = summarize_cycles(df_labeled)
+    manip = [c for c in cycles if c["label"] == "manipulation"]
+    avg_manip = round(np.mean([c["abs_point_move"] for c in manip]), 2) if manip else None
+    return {
+        "period": period,
+        "total_cycles": len(cycles),
+        "manipulation_count": len(manip),
+        "avg_manipulation_size": avg_manip
+    }
+
+# ADD THIS BLOCK TO THE VERY BOTTOM OF YOUR main.py
+if __name__ == "__main__":
+    # This line is essential for Cloud Run to know which port to listen on
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)
 
 def detect_amd(df: pd.DataFrame,
                vol_spike_mult: float = 3.0,
