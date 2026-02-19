@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import yfinance as yf
+import plotly.express as px
 
 # --- Setup ---
 st.set_page_config(page_title="Alpha Quant Terminal", layout="wide")
@@ -21,36 +22,32 @@ def load_data(ticker, days):
 try:
     df = load_data(symbol, lookback_days)
     df['Hour'] = df.index.hour
+    df['HL_Range'] = df['High'] - df['Low']
     
-    # --- PRO VISUALS: Session Analysis ---
+    # --- Session Analysis ---
     st.subheader("📊 Session Volatility Logic")
     
-    # Logic for London (2am-5am) and NY (8:30am-12pm)
-    london = df[(df['Hour'] >= 2) & (df['Hour'] <= 5)]
-    ny_am = df[(df['Hour'] >= 9) & (df['Hour'] <= 12)] # Hourly data approximation
-    
-    lon_move = (london['High'] - london['Low']).mean()
-    ny_move = (ny_am['High'] - ny_am['Low']).mean()
+    # Correcting the Series vs Float error
+    london = df[(df['Hour'] >= 2) & (df['Hour'] <= 5)]['HL_Range'].mean()
+    ny_am = df[(df['Hour'] >= 9) & (df['Hour'] <= 12)]['HL_Range'].mean()
     
     c1, c2, c3 = st.columns(3)
-    c1.metric("London Avg Move (Pts)", f"{lon_move:.2f}")
-    c2.metric("NY AM Avg Move (Pts)", f"{ny_move:.2f}")
-    c3.metric("Volatility Edge", f"NY is {((ny_move/lon_move)-1)*100:.1f}% higher")
+    c1.metric("London Avg Move", f"{float(london):.2f} pts")
+    c2.metric("NY AM Avg Move", f"{float(ny_am):.2f} pts")
+    c3.metric("Volatility Edge", f"{((ny_am/london)-1)*100:.1f}% higher")
+
+    # --- Volatility Heatmap ---
+    st.subheader("🔥 Hourly Volatility Heatmap")
+    hourly_vol = df.groupby('Hour')['HL_Range'].mean().reset_index()
+    fig = px.bar(hourly_vol, x='Hour', y='HL_Range', 
+                 title="Average Point Move by Hour (EST)",
+                 labels={'HL_Range': 'Avg Points'},
+                 color='HL_Range', color_continuous_scale='Viridis')
+    st.plotly_chart(fig, use_container_layout=True)
 
     # --- Main Chart ---
+    st.subheader("📈 Price Action")
     st.line_chart(df['Close'])
-
-    # --- THE "INTELLIGENT" CHAT BOX (Local Logic) ---
-    st.divider()
-    st.subheader("🤖 Strategy Researcher")
-    query = st.text_input("Ask a session question (e.g., 'Compare London vs NY')")
-    
-    if query:
-        if "London" in query or "NY" in query or "session" in query:
-            st.write(f"### Analysis for {symbol}:")
-            st.info(f"The **NY Open** (8:30-12:00) currently shows an average expansion of **{ny_move:.2f} points**, whereas **London** averages **{lon_move:.2f}**. Statistically, your best 'Standard Deviation' plays occur 45 minutes after the NY Open.")
-        else:
-            st.write("I'm monitoring the tape. Ask me about session volatility or point moves!")
 
 except Exception as e:
     st.error(f"Terminal Error: {e}")
