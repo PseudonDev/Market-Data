@@ -61,16 +61,19 @@ try:
             system_msg = f"You are a Quant Trader. Analyze this data for the user: {recent_data_summary}"
 
             with st.chat_message("assistant"):
-               response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": system_msg},
-                        {"role": "user", "content": prompt}
-                    ]
-                )
-                answer = response.choices[0].message.content
-                st.markdown(answer)
-                st.session_state.messages.append({"role": "assistant", "content": answer})
+                try:
+                    response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {"role": "system", "content": system_msg},
+                            {"role": "user", "content": prompt}
+                        ]
+                    )
+                    answer = response.choices[0].message.content
+                    st.markdown(answer)
+                    st.session_state.messages.append({"role": "assistant", "content": answer})
+                except Exception as ai_err:
+                    st.error(f"AI Error: {ai_err}")
 
 except Exception as e:
     st.error(f"Error: {e}")
