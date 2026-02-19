@@ -13,41 +13,37 @@ st.title("⚡ Alpha Quant Terminal")
 st.sidebar.header("Terminal Settings")
 symbol = st.sidebar.text_input("Ticker Symbol", value="NQ=F")
 lookback_days = st.sidebar.slider("Analysis Window (Days)", 7, 60, 30)
-api_key = st.sidebar.text_input("OpenAI API Key (Required for Chat)", type="password")
+api_key = st.sidebar.text_input("OpenAI API Key", type="password")
 
 @st.cache_data(ttl=3600)
 def load_data(ticker, days):
-    # Download data
     data = yf.download(ticker, period=f"{days}d", interval="1h")
-    
-    # FIX: Flatten Multi-Index columns if they exist
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = data.columns.get_level_values(0)
-    
     data.index = data.index.tz_localize(None)
     return data
 
 try:
     df = load_data(symbol, lookback_days)
-    
-    # Double check columns exist after flattening
-    required_cols = ['Open', 'High', 'Low', 'Close']
-    if not all(col in df.columns for col in required_cols):
-        st.error(f"Data for {symbol} is missing required columns. Try another ticker like 'AAPL'.")
-        st.stop()
-
     df['Hour'] = df.index.hour
     df['HL_Range'] = df['High'] - df['Low']
     
-    # --- Metrics & Heatmap ---
-    london = df[(df['Hour'] >= 2) & (df['Hour'] <= 5)]['HL_Range'].mean()
-    ny_am = df[(df['Hour'] >= 9) & (df['Hour'] <= 12)]['HL_Range'].mean()
+    # --- Advanced Math: Session SD Levels ---
+    # 1. Get London Session (2am-5am)
+    london_data = df[(df['Hour'] >= 2) & (df['Hour'] <= 5)]
+    lon_mean = london_data['Close'].mean()
+    lon_std = london_data['Close'].std()
+    
+    # 2. Calculate the "Reversal Zones"
+    sd1 = lon_mean + (1.25 * lon_std) # Midpoint of 1-1.5
+    sd2 = lon_mean + (2.25 * lon_std) # Midpoint of 2-2.5
     
     c1, c2, c3 = st.columns(3)
-    c1.metric("London Avg Move", f"{float(london):.2f} pts")
-    c2.metric("NY AM Avg Move", f"{float(ny_am):.2f} pts")
-    c3.metric("Volatility Edge", f"{((ny_am/london)-1)*100:.1f}% higher")
+    c1.metric("London Mean (Price)", f"{lon_mean:.2f}")
+    c2.metric("1.5 SD Level", f"{lon_mean + (1.5 * lon_std):.2f}")
+    c3.metric("2.5 SD Level", f"{lon_mean + (2.5 * lon_std):.2f}")
 
+    # --- Volatility Heatmap ---
     st.subheader("🔥 Hourly Volatility Heatmap")
     hourly_vol = df.groupby('Hour')['HL_Range'].mean().reset_index()
     fig = px.bar(hourly_vol, x='Hour', y='HL_Range', color='HL_Range', color_continuous_scale='Viridis')
@@ -58,7 +54,7 @@ try:
     st.subheader("🤖 AI Quant Researcher")
     
     if not api_key:
-        st.info("Enter your OpenAI API Key in the sidebar to unlock the Research Chat.")
+        st.info("Enter your OpenAI API Key in the sidebar.")
     else:
         client = OpenAI(api_key=api_key)
         if "messages" not in st.session_state:
@@ -68,24 +64,31 @@ try:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        if prompt := st.chat_input("Ask about reversals or standard deviations..."):
+        if prompt := st.chat_input("Ask about the SD reversals..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
 
-            # Summarize for AI context
-            daily_summary = df.resample('D').agg({
-                'High': 'max', 'Low': 'min', 'Close': 'last', 'HL_Range': 'mean'
-            }).tail(7).to_string()
+            # FEEDING THE AI ACTUAL MATH
+            context = f"""
+            Ticker: {symbol}
+            London Mean Price: {lon_mean:.2f}
+            London StdDev: {lon_std:.2f}
+            NY Open Price: {df[df['Hour'] == 9]['Open'].iloc[-1] if 9 in df['Hour'].values else 'N/A'}
             
-            context = f"Analyzing {symbol}. London Avg={london:.2f}, NY Avg={ny_am:.2f}. Last 7 Days: {daily_summary}"
+            SD Levels anchored to London Mean:
+            +1.0 SD: {lon_mean + lon_std:.2f}
+            +1.5 SD: {lon_mean + (1.5 * lon_std):.2f}
+            +2.0 SD: {lon_mean + (2.0 * lon_std):.2f}
+            +2.5 SD: {lon_mean + (2.5 * lon_std):.2f}
+            """
             
             with st.chat_message("assistant"):
                 try:
                     response = client.chat.completions.create(
                         model="gpt-4o-mini",
                         messages=[
-                            {"role": "system", "content": f"You are a Quant Strategist. Context: {context}"},
+                            {"role": "system", "content": f"You are a Quant. Use these exact numbers to answer: {context}"},
                             {"role": "user", "content": prompt}
                         ]
                     )
