@@ -39,6 +39,5 @@ col3.metric("RSI (14)", f"{df['RSI'].iloc[-1].item():.2f}")
     st.subheader("Midnight Reversal Analysis")
     # (Insert your specific London/Midnight logic here)
     st.line_chart(df['Close'])
-
 except Exception as e:
     st.error(f"Error loading data: {e}")
