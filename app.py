@@ -22,22 +22,20 @@ def load_data(ticker, days):
 
 try:
     df = load_data(symbol, lookback_days)
-    st.success(f"Loaded {len(df)} rows for {symbol}")
-
+    
     # --- Calculations ---
     df['SMA_20'] = df['Close'].rolling(window=20).mean()
-    df['RSI'] = 100 - (100 / (1 + (df['Close'].diff().clip(lower=0).rolling(14).mean() / 
-                                  df['Close'].diff().clip(upper=0).abs().rolling(14).mean())))
+    df['RSI'] = 100 - (100 / (1 + (df['Close'].diff().clip(lower=0).rolling(14).mean() / df['Close'].diff().clip(upper=0).abs().rolling(14).mean())))
 
     # --- Display Metrics ---
     col1, col2, col3 = st.columns(3)
-col1.metric("Current Price", f"{df['Close'].iloc[-1].item():.2f}")
-col2.metric("SMA (20)", f"{df['SMA_20'].iloc[-1].item():.2f}")
-col3.metric("RSI (14)", f"{df['RSI'].iloc[-1].item():.2f}")
+    col1.metric("Current Price", f"{df['Close'].iloc[-1].item():.2f}")
+    col2.metric("SMA (20)", f"{df['SMA_20'].iloc[-1].item():.2f}")
+    col3.metric("RSI (14)", f"{df['RSI'].iloc[-1].item():.2f}")
 
-    # --- Reversal Logic ---
-    st.subheader("Midnight Reversal Analysis")
-    # (Insert your specific London/Midnight logic here)
+    # --- Charts ---
+    st.subheader("Price Chart")
     st.line_chart(df['Close'])
+
 except Exception as e:
     st.error(f"Error loading data: {e}")
