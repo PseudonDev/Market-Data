@@ -40,7 +40,7 @@ try:
     fig = px.bar(hourly_vol, x='Hour', y='HL_Range', color='HL_Range', color_continuous_scale='Viridis')
     st.plotly_chart(fig, use_container_layout=True)
 
-    # --- AI Chat Researcher (The "Brain") ---
+    # --- AI Chat Researcher (The Brain) ---
     st.divider()
     st.subheader("🤖 AI Quant Researcher")
     
@@ -60,15 +60,31 @@ try:
             with st.chat_message("user"):
                 st.markdown(prompt)
 
-            # Data Context: Give the AI the session stats so it can answer complex Qs
-            context = f"Current Stats for {symbol}: London Avg={london:.2f}, NY Avg={ny_am:.2f}. Data: {df.tail(50).to_string()}"
+            # NEW: Create a summary for the AI so it can see the last 7 days of trends
+            daily_summary = df.resample('D').agg({
+                'High': 'max', 
+                'Low': 'min', 
+                'Close': 'last', 
+                'HL_Range': 'mean'
+            }).tail(7).to_string()
+            
+            context = f"""
+            You are a Quant Strategist analyzing {symbol}.
+            Live Stats: London Avg={london:.2f}, NY Avg={ny_am:.2f}.
+            
+            Last 7 Days Data Summary:
+            {daily_summary}
+            
+            Recent Hourly Tape:
+            {df.tail(20).to_string()}
+            """
             
             with st.chat_message("assistant"):
                 try:
                     response = client.chat.completions.create(
                         model="gpt-4o-mini",
                         messages=[
-                            {"role": "system", "content": f"You are a Quant Strategist. Use this data: {context}"},
+                            {"role": "system", "content": context},
                             {"role": "user", "content": prompt}
                         ]
                     )
