@@ -61,8 +61,8 @@ try:
             system_msg = f"You are a Quant Trader. Analyze this data for the user: {recent_data_summary}"
 
             with st.chat_message("assistant"):
-                response = client.chat.completions.create(
-                    model="gpt-4-turbo-preview",
+               response = client.chat.completions.create(
+                    model="gpt-4o-mini",
                     messages=[
                         {"role": "system", "content": system_msg},
                         {"role": "user", "content": prompt}
