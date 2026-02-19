@@ -17,12 +17,25 @@ api_key = st.sidebar.text_input("OpenAI API Key (Required for Chat)", type="pass
 
 @st.cache_data(ttl=3600)
 def load_data(ticker, days):
+    # Download data
     data = yf.download(ticker, period=f"{days}d", interval="1h")
+    
+    # FIX: Flatten Multi-Index columns if they exist
+    if isinstance(data.columns, pd.MultiIndex):
+        data.columns = data.columns.get_level_values(0)
+    
     data.index = data.index.tz_localize(None)
     return data
 
 try:
     df = load_data(symbol, lookback_days)
+    
+    # Double check columns exist after flattening
+    required_cols = ['Open', 'High', 'Low', 'Close']
+    if not all(col in df.columns for col in required_cols):
+        st.error(f"Data for {symbol} is missing required columns. Try another ticker like 'AAPL'.")
+        st.stop()
+
     df['Hour'] = df.index.hour
     df['HL_Range'] = df['High'] - df['Low']
     
@@ -40,7 +53,7 @@ try:
     fig = px.bar(hourly_vol, x='Hour', y='HL_Range', color='HL_Range', color_continuous_scale='Viridis')
     st.plotly_chart(fig, use_container_layout=True)
 
-    # --- AI Chat Researcher (The Brain) ---
+    # --- AI Chat Researcher ---
     st.divider()
     st.subheader("🤖 AI Quant Researcher")
     
@@ -55,36 +68,24 @@ try:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        if prompt := st.chat_input("Ask a complex question..."):
+        if prompt := st.chat_input("Ask about reversals or standard deviations..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
 
-            # NEW: Create a summary for the AI so it can see the last 7 days of trends
+            # Summarize for AI context
             daily_summary = df.resample('D').agg({
-                'High': 'max', 
-                'Low': 'min', 
-                'Close': 'last', 
-                'HL_Range': 'mean'
+                'High': 'max', 'Low': 'min', 'Close': 'last', 'HL_Range': 'mean'
             }).tail(7).to_string()
             
-            context = f"""
-            You are a Quant Strategist analyzing {symbol}.
-            Live Stats: London Avg={london:.2f}, NY Avg={ny_am:.2f}.
-            
-            Last 7 Days Data Summary:
-            {daily_summary}
-            
-            Recent Hourly Tape:
-            {df.tail(20).to_string()}
-            """
+            context = f"Analyzing {symbol}. London Avg={london:.2f}, NY Avg={ny_am:.2f}. Last 7 Days: {daily_summary}"
             
             with st.chat_message("assistant"):
                 try:
                     response = client.chat.completions.create(
                         model="gpt-4o-mini",
                         messages=[
-                            {"role": "system", "content": context},
+                            {"role": "system", "content": f"You are a Quant Strategist. Context: {context}"},
                             {"role": "user", "content": prompt}
                         ]
                     )
