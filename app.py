@@ -31,9 +31,9 @@ try:
 
     # --- Display Metrics ---
     col1, col2, col3 = st.columns(3)
-    col1.metric("Current Price", f"{df['Close'].iloc[-1]:.2f}")
-    col2.metric("SMA (20)", f"{df['SMA_20'].iloc[-1]:.2f}")
-    col3.metric("RSI (14)", f"{df['RSI'].iloc[-1]:.2f}")
+col1.metric("Current Price", f"{df['Close'].iloc[-1].item():.2f}")
+col2.metric("SMA (20)", f"{df['SMA_20'].iloc[-1].item():.2f}")
+col3.metric("RSI (14)", f"{df['RSI'].iloc[-1].item():.2f}")
 
     # --- Reversal Logic ---
     st.subheader("Midnight Reversal Analysis")
