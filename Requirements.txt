@@ -1,6 +1,4 @@
-fastapi
-uvicorn
+streamlit
 pandas
 numpy
 yfinance
-pydantic
